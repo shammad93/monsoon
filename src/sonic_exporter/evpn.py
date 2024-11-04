@@ -91,7 +91,7 @@ class EvpnCollector:
             vni = decode(str(evpn_vni["vni"]))
             interface = ""
             svi = ""
-            layer = decode(OSILayer(evpn_vni["type"].lower()))
+            layer = OSILayer(evpn_vni["type"].lower())
             vrf = decode(evpn_vni["vrf"])
             state = False
             match layer:
