@@ -21,7 +21,7 @@ from .converters import boolify, floatify
 from .utilities import dns_lookup, thread_pool, get_logger
 from .vtysh import vtysh
 from .enums import AddressFamily
-
+import traceback
 _logger = get_logger().getLogger(__name__)
 
 
@@ -125,6 +125,7 @@ class BgpCollector:
         # Sent Prefixes
         # status
         bgp_vrf_all = vtysh.show_bgp_vrf_all_summary()
+        # _logger.info(f'{bgp_vrf_all}')
         ip_route_vrf_all = vtysh.show_ip_route_vrf_all_summary()
         ipv6_route_vrf_all = vtysh.show_ipv6_route_vrf_all_summary()
         _logger.debug(f"Found VRFs: {bgp_vrf_all.keys()}")
@@ -163,12 +164,16 @@ class BgpCollector:
             for family in bgp_vrf_all[vrf].keys():
                 family_data = None
                 afi, safi = vtysh.get_afi_safi(family)
+                _logger.info(f'AFI: {afi} SAFI: {safi}')
                 try:
                     family_data = bgp_vrf_all[vrf][family]
+                    _logger.info(f"Family_data:{family_data}")
                     as_id = family_data.get("as")
                     for peername, peerdata in family_data["peers"].items():
+                        _logger.info(f'PeerName: {peername}')
+                        _logger.info(f'PeerData: {peerdata}')
                         remote = peerdata.get("hostname", dns_lookup(peername))
-                        _logger.debug(
+                        _logger.info(
                             f"Exporting Metrics for: {peername}->{remote} afi: {afi} safi: {safi} frr_family: {family}"
                         )
                         # ["vrf", "peername", "neighbor", "peer_protocol", "protocol_family_advertised", "remote_as"]
@@ -182,11 +187,13 @@ class BgpCollector:
                             safi.value,
                             str(peerdata.get("remoteAs")),
                         ]
-                        prefix_counts_data = (
-                            vtysh.show_bgp_vrf_afi_safi_neighbors_prefix_counts(
-                                vrf, neighbor=peername, afi=afi, safi=safi
+                        # _logger.info(f'bgp_lbl: {bgp_lbl}')
+                        if afi in [AddressFamily.IPV4, AddressFamily.IPV6]:
+                            prefix_counts_data = (
+                                vtysh.show_bgp_vrf_afi_safi_neighbors_prefix_counts(
+                                    vrf, neighbor=peername, afi=afi, safi=safi
+                                )
                             )
-                        )
                         self.metric_bgp_routes_rib.add_metric(
                             [*bgp_lbl], floatify(prefix_counts_data.get("All RIB", 0))
                         )
@@ -210,7 +217,8 @@ class BgpCollector:
                             [*bgp_lbl], floatify(peerdata.get("msgSent", 0))
                         )
                 except (KeyError, Exception) as e:
-                    _logger.debug(
+                    _logger.info(
                         f"Skipped vrf bgp export: vrf: {vrf} family: {family} afi: {afi} safi: {safi} error: {e}"
                     )
+                    _logger.info(f"Full traceback:\n{traceback.format_exc()}")
                     continue
